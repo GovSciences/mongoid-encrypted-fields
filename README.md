@@ -25,12 +25,18 @@ Queries encrypt data before searching the database, so equality matches work aut
 ## Install
     gem 'mongoid-encrypted-fields'
 
+## Searchable vs. Unsearchable
+
+* Default encrypted fields use a global salt so the same value produces the same encrypted output.  Queries work by first encrypting the search term, then searching for the encrypted value.
+* Unsearchable encrypted fields use a unique salt each time a value is encrypted.  Encrypting the same value multiple times will generate unique encrypted outputs each time.  Queries on unsearchable encrypted fields are not possible.
+
 ## Usage
-* Configure the cipher to be used for encrypting field values:
+* Configure the ciphers to be used for encrypting field values:
 
     GibberishCipher can be found in examples - uses the [Gibberish](https://github.com/mdp/gibberish) gem:
 ```Ruby
-    Mongoid::EncryptedFields.cipher = Gibberish.new(ENV['MY_PASSWORD'], ENV['MY_SALT'])
+    Mongoid::EncryptedFields.cipher = GibberishCipher.new(ENV['MY_PASSWORD'], ENV['MY_SALT'])
+    Mongoid::EncryptedFields.unsearchable_cipher = GibberishCipher.new(ENV['MY_PASSWORD'])
 ```
 
 * Use encrypted types for fields in your models:
@@ -38,8 +44,8 @@ Queries encrypt data before searching the database, so equality matches work aut
     class Person
         include Mongoid::Document
 
-        field :name, type: String
-        field :ssn, type: Mongoid::EncryptedString
+        field :ssn, type: Mongoid::EncryptedString              #can search for Person with ssn
+        field :name, type: Mongoid::UnsearchableEncryptedString #don't need to search based on name
     end
     ```
 * The field getter returns the unencrypted value:
@@ -57,6 +63,7 @@ Queries encrypt data before searching the database, so equality matches work aut
 * Finding a model by an encrypted field works automatically (equality only):
     ```Ruby
     Person.where(ssn: '123456789').count() # ssn is encrypted before querying the database
+    Person.where(name: 'John Doe').count() # does not work!  uses a new salt each time the value is encrypted
     ```
 * The Mongoid uniqueness validator is patched to detect encrypted fields:
     ```Ruby
@@ -65,6 +72,7 @@ Queries encrypt data before searching the database, so equality matches work aut
         field :ssn, type: Mongoid::EncryptedString
         validates_uniqueness_of :ssn, case_sensitive: true # Works as expected
         validates_uniqueness_of :ssn, case_sensitive: false # Raises exception - encrypted field cannot support a case insensitive match
+        validates_uniqueness_of :name # Raises exception - unsearchable encrypted field does not support match query
     end
 
     Person.create!(name: 'Bill', ssn: '123456789')
@@ -72,7 +80,6 @@ Queries encrypt data before searching the database, so equality matches work aut
     ```
 
 ## Known Limitations
-* Single cipher for all encrypted fields
 * Currently can encrypt these [Mongoid types](http://mongoid.org/en/mongoid/docs/documents.html#fields)
   * Date
   * DateTime
@@ -80,6 +87,7 @@ Queries encrypt data before searching the database, so equality matches work aut
   * String
   * Time
 * The uniqueness validator for encrypted fields is always case-sensitive.  Using it with case-sensitive false raises an exception.
+* Queries for unsearchable encrypted fields do not work.
 
 ## Related Articles
 * [Storing Encrypted Data in MongoDB](http://jerryclinesmith.me/blog/2013/03/29/storing-encrypted-data-in-mongodb/)

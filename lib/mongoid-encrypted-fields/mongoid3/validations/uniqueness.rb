@@ -10,6 +10,13 @@ module Mongoid
 
       def setup_with_validation(klass)
         setup_without_validation(klass)
+
+        attributes.each do |attribute|
+          field_name = @klass.database_field_name(attribute)
+          field_type = @klass.fields[field_name].options[:type] if @klass.fields[field_name]
+          raise ArgumentError, "Encrypted field :#{attribute} cannot support uniqueness validation.  Use searchable encrypted type instead." if field_type && field_type.method_defined?(:encrypted) && field_type.respond_to?(:unsearchable?)
+        end
+
         return if case_sensitive?
         attributes.each do |attribute|
           field_type = @klass.fields[@klass.database_field_name(attribute)].options[:type]
